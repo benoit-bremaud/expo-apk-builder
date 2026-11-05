@@ -4,7 +4,7 @@
 # The SDK, NDK and tool versions are build arguments: override them when an Expo SDK needs others.
 # Build-time downloads trust the host CA (TLS-inspecting proxy) through a BuildKit secret, combined
 # into a temporary CA bundle and Java trust store per RUN: the CA is never added to the image's trust store.
-FROM eclipse-temurin:17-jdk-noble@sha256:ec2c8050c856a00986776ddd94d4facc9e872430c27799108ca318a26f9f1887
+FROM eclipse-temurin:25-jdk-noble@sha256:95e350ad1eb738f943e141640f7e3d797e483359a3b33c3864255bfd1ad71f8a
 
 ARG NODE_VERSION=24.21.0
 ARG NODE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
