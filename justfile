@@ -72,4 +72,4 @@ install package app profile="preview":
 check:
     hadolint --config .hadolint.yaml Dockerfile
     trivy config --exit-code 1 --severity HIGH,CRITICAL --misconfig-scanners dockerfile .
-    gitleaks git . --no-banner
+    gitleaks git --redact --no-banner .
