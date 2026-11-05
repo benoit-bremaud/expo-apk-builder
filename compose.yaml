@@ -1,0 +1,54 @@
+# One-shot `eas build --local` container for any Expo project, run by `just build` (README).
+# The Compose project name is `<project>-apk` (set by the recipe with -p), so Dock'n Roll lists
+# each project's build and can stop it. Every ${VAR} below is exported by `just build`.
+
+services:
+  apk-build:
+    image: expo-apk-builder:local
+    platform: linux/amd64
+    # Forwards SIGTERM from docker stop / Dock'n Roll and reaps the Gradle and CMake children.
+    init: true
+    working_dir: ${REPO:?run through just build}/${APP_DIR:?run through just build}
+    env_file:
+      - path: ${EXPO_TOKEN_FILE:-/dev/null}
+        required: false
+    environment:
+      # The JDK ships its own CA bundle; the host Java one makes a TLS-inspecting proxy trusted
+      # by the OS (Aikido safe-chain here) trusted by Gradle too.
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/host-cacerts
+      # Prebuilt android/gradle.properties often cap the daemon at 512 MB Metaspace, which KSP
+      # exhausts in this container (OutOfMemoryError: Metaspace); a -D wins over that file.
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g\ -XX:MaxMetaspaceSize=1g
+    volumes:
+      - ${REPO}:${REPO}:ro
+      # The git common dir, mounted apart so a worktree checkout resolves its objects.
+      - ${GITDIR:?run through just build}:${GITDIR}:ro
+      - ${REPO}/${APP_DIR}/build:/out
+      # Long syntax: fail loudly instead of creating a root-owned directory when the host has no
+      # Java CA bundle (package ca-certificates-java).
+      - type: bind
+        source: ${HOST_JAVA_CACERTS:-/etc/ssl/certs/java/cacerts}
+        target: /etc/host-cacerts
+        read_only: true
+        bind:
+          create_host_path: false
+      # An empty `{}` session when EXPO_TOKEN is used: eas-cli fails on an empty state.json.
+      - ${EXPO_STATE:-./no-session.json}:/home/builder/.expo/state.json:ro
+      - gradle-cache:/home/builder/.gradle
+    command:
+      [
+        "build",
+        "--platform",
+        "android",
+        "--profile",
+        "${PROFILE:?run through just build}",
+        "--local",
+        "--non-interactive",
+        "--output",
+        "/out/${PROFILE}.apk",
+      ]
+
+volumes:
+  # One Gradle cache per project: two projects never share (or lock) each other's cache.
+  gradle-cache:
+    name: ${PROJECT:?run through just build}-gradle-cache
