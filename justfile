@@ -28,19 +28,23 @@ build project app profile="preview": image
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(invocation_directory())}}
-    project={{quote(project)}} app={{quote(app)}}
+    project={{quote(project)}} app={{quote(app)}} profile={{quote(profile)}}
     [[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || { echo "build: project must be a lowercase Compose name"; exit 1; }
+    # A relative path inside the checkout; `:` would break the short volume syntax of compose.yaml.
+    [[ "$app" != /* && "$app" != *..* && "$app" != *:* ]] || { echo "build: app must be a relative path inside the checkout"; exit 1; }
+    [[ "$profile" =~ ^[A-Za-z0-9._-]+$ && "$profile" != -* ]] || { echo "build: invalid profile name"; exit 1; }
     repo="$(git rev-parse --show-toplevel)"
     [ -f "$repo/$app/app.json" ] || [ -f "$repo/$app/app.config.ts" ] || [ -f "$repo/$app/app.config.js" ] \
       || { echo "build: $app is not an Expo app folder (no app.json or app.config.*)"; exit 1; }
     if [ -n "$(git status --porcelain)" ]; then
       echo "build: working tree not clean, commit or set the changes aside first"; exit 1
     fi
-    token="${EXPO_TOKEN_FILE:-$HOME/.config/expo-tokens/$project}"
+    # Per-project token file only: a global override would hand one project's token to another.
+    token="$HOME/.config/expo-tokens/$project"
     if [ -s "$token" ]; then export EXPO_TOKEN_FILE="$token"
     elif [ -f "$HOME/.expo/state.json" ]; then export EXPO_STATE="$HOME/.expo/state.json"; unset EXPO_TOKEN_FILE
     else echo "build: no Expo auth, run eas login or create $token"; exit 1; fi
-    export REPO="$repo" APP_DIR="$app" PROJECT="$project" PROFILE={{quote(profile)}}
+    export REPO="$repo" APP_DIR="$app" PROJECT="$project" PROFILE="$profile"
     export GITDIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
     mkdir -p "$repo/$app/build"
     name="$project-apk-build"
@@ -58,11 +62,14 @@ install package app profile="preview":
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{quote(invocation_directory())}}
-    apk="$(git rev-parse --show-toplevel)/{{app}}/build/{{profile}}.apk"
+    app={{quote(app)}} profile={{quote(profile)}}
+    apk="$(git rev-parse --show-toplevel)/$app/build/$profile.apk"
     [ -f "$apk" ] || { echo "install: $apk not found, run build first"; exit 1; }
     adb uninstall {{quote(package)}} || true
     adb install "$apk"
 
-# Lint the Dockerfile (same Hadolint as the gate of the calling projects).
-lint:
-    hadolint {{quote(builder / "Dockerfile")}}
+# Lint and scan the image recipe and the history (tools pinned in mise.toml): run before every push.
+check:
+    hadolint --config .hadolint.yaml Dockerfile
+    trivy config --exit-code 1 --severity HIGH,CRITICAL --misconfig-scanners dockerfile .
+    gitleaks git . --no-banner

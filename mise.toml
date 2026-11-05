@@ -1,0 +1,4 @@
+[tools]
+hadolint = "2.15.1"
+trivy = "0.76.1"
+gitleaks = "8.30.1"

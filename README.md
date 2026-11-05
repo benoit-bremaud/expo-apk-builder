@@ -11,22 +11,30 @@ One container image that builds Android APKs for any Expo project on this machin
 - **Compose file:** one one-shot service per build. Each project gets its own Compose project
   (`<project>-apk`), container (`<project>-apk-build`) and Gradle cache volume
   (`<project>-gradle-cache`), so Dock'n Roll lists the build and can stop it.
-- **justfile:** the `image`, `build`, `install` and `lint` recipes that projects call.
+- **justfile:** the `image`, `build` and `install` recipes that projects call, and `check`
+  (Hadolint, Trivy config, gitleaks, pinned in `mise.toml`) to run before every push.
 
 Extracted from Brasse-Bouillon (benoit-bremaud/brasse-bouillon#2277), its first user.
 
 ## Requirements
 
-- Docker 24 or later with BuildKit and the Compose plugin; [just](https://just.systems).
+- Docker 24 or later with BuildKit and the Compose plugin v2.24 or later; [just](https://just.systems);
+  [mise](https://mise.jdx.dev) for `just check`.
 - The host Java CA bundle `/etc/ssl/certs/java/cacerts` (package `ca-certificates-java`), or set
   `HOST_JAVA_CACERTS`. Gradle trusts the same CAs as the host, a TLS-inspecting proxy included.
 - An x86_64 host: the Linux NDK host toolchain ships for x86_64 only.
 - Expo auth: `eas login` on the host (read-only mount of `~/.expo/state.json`), or a file
-  `~/.config/expo-tokens/<project>` holding `EXPO_TOKEN=...` (override with `EXPO_TOKEN_FILE`).
+  `~/.config/expo-tokens/<project>` (mode 600) holding `EXPO_TOKEN=...`, which wins when not empty.
 
 ## Use it from a project
 
-Clone this repository next to your projects, then add recipes to the project's `justfile`:
+Clone this repository next to your projects:
+
+```bash
+git clone https://github.com/benoit-bremaud/expo-apk-builder ~/Documents/02_personal/expo-apk-builder
+```
+
+Then add recipes to the project's `justfile`:
 
 ```just
 apk_builder := env("EXPO_APK_BUILDER", env("HOME") / "Documents/02_personal/expo-apk-builder/justfile")
@@ -55,8 +63,9 @@ The first `build` builds the image (about 15 minutes); later ones reuse it and t
 
 Every tool version is a build argument in the [Dockerfile](Dockerfile). To move to a new Expo SDK
 that needs another NDK or platform, change the `ARG` defaults (and the checksums for Node or the
-command-line tools), run `just lint`, then `just image`. All calling projects pick it up on their
-next build; check each of them still builds.
+command-line tools), run `mise x -- just check`, then `just image`. All calling projects pick it up on their
+next build; check each of them still builds. Calling projects track this repository's `main`,
+they do not pin a commit: a version bump is reviewed here, once, for all of them.
 
 ## TLS-inspecting proxy
 
